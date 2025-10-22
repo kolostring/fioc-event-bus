@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "es2020", // modern enough for Node 14+
+    "lib": ["es2020", "dom"], // safe baseline (no es2023 leaks in d.ts)
+    "module": "esnext", // let tsup bundle formats
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "outDir": "dist",
+    "strict": true,
+    "skipLibCheck": true,
+    "removeComments": false
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "src/__tests__/**"]
+}
