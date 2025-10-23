@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildDIContainer, createDIToken, DIToken } from "@fioc/core";
+import { buildDIContainer, createDIToken } from "@fioc/core";
 import { EventBusFactory } from "../../core/EventBus.js";
 import {
   INotificationHandlerToken,
@@ -20,47 +20,46 @@ type TestNotificationPayload = {
   message: string;
 };
 
-const TestNotificationPayloadToken = createDIToken<TestNotificationPayload>().as("TestNotificationPayload");
+const TestNotificationPayloadToken =
+  createDIToken<TestNotificationPayload>().as("TestNotificationPayload");
 
 // Test command payload type
 type TestCommandPayload = {
   input: string;
 };
 
-const TestCommandPayloadToken = createDIToken<TestCommandPayload>().as("TestCommandPayload");
+const TestCommandPayloadToken =
+  createDIToken<TestCommandPayload>().as("TestCommandPayload");
 
 // Test notification token
-const TestNotificationToken = createDIToken<INotification<TestNotificationPayload>>().as("TestNotification", {
+const TestNotificationToken = createDIToken<
+  INotification<TestNotificationPayload>
+>().as("TestNotification", {
   implements: [INotificationToken],
-  generics: [TestNotificationPayloadToken]
+  generics: [TestNotificationPayloadToken],
 });
 
 // Test command token
-const TestCommandToken = createDIToken<ICommand<TestCommandPayload, string>>().as("TestCommand", {
+const TestCommandToken = createDIToken<
+  ICommand<TestCommandPayload, string>
+>().as("TestCommand", {
   implements: [ICommandToken],
-  generics: [TestCommandPayloadToken]
+  generics: [TestCommandPayloadToken],
 });
 
 // Test notification handler
-const TestNotificationHandlerToken = createDIToken<INotificationHandler<any, any>>()
-  .as("TestNotificationHandler", {
-    implements: [INotificationHandlerToken],
-    generics: [TestNotificationToken]
-  });
+const TestNotificationHandlerToken = createDIToken<
+  INotificationHandler<any, any>
+>().as("TestNotificationHandler", {
+  implements: [INotificationHandlerToken],
+  generics: [TestNotificationToken],
+});
 
 // Test command handler
-const TestCommandHandlerToken = createDIToken()
-  .as("TestCommandHandler", {
-    implements: [ICommandHandlerToken],
-    generics: [TestCommandToken]
-  });
-
-// Test middleware
-const TestMiddlewareToken = createDIToken()
-  .as("TestMiddleware", {
-    implements: [IHandlerMiddlewareToken],
-    generics: [TestNotificationToken]
-  });
+const TestCommandHandlerToken = createDIToken().as("TestCommandHandler", {
+  implements: [ICommandHandlerToken],
+  generics: [TestCommandToken],
+});
 
 describe("EventBus", () => {
   describe("Notifications", () => {
@@ -71,14 +70,14 @@ describe("EventBus", () => {
         .register(MiddleWareOrderToken, [])
         .registerFactory(IEventBusToken, EventBusFactory)
         .register(TestNotificationHandlerToken, {
-          handle: handlerSpy
+          handle: handlerSpy,
         })
         .getResult();
 
       const notification: INotification<TestNotificationPayload> = {
         createdAt: new Date(),
         token: TestNotificationToken,
-        payload: { message: "test" }
+        payload: { message: "test" },
       };
       const eventBus = container.resolve(IEventBusToken);
 
@@ -91,17 +90,19 @@ describe("EventBus", () => {
       const handler1Spy = vi.fn();
       const handler2Spy = vi.fn();
 
-      const Handler1Token = createDIToken<INotificationHandler<INotification<TestNotificationPayload>, void>>()
-        .as("Handler1", {
-          implements: [INotificationHandlerToken],
-          generics: [TestNotificationToken]
-        });
+      const Handler1Token = createDIToken<
+        INotificationHandler<INotification<TestNotificationPayload>, void>
+      >().as("Handler1", {
+        implements: [INotificationHandlerToken],
+        generics: [TestNotificationToken],
+      });
 
-      const Handler2Token = createDIToken<INotificationHandler<INotification<TestNotificationPayload>, void>>()
-        .as("Handler2", {
-          implements: [INotificationHandlerToken],
-          generics: [TestNotificationToken]
-        });
+      const Handler2Token = createDIToken<
+        INotificationHandler<INotification<TestNotificationPayload>, void>
+      >().as("Handler2", {
+        implements: [INotificationHandlerToken],
+        generics: [TestNotificationToken],
+      });
 
       const container = buildDIContainer()
         .register(MiddleWareOrderToken, [])
@@ -115,7 +116,7 @@ describe("EventBus", () => {
       const notification: INotification<TestNotificationPayload> = {
         createdAt: new Date(),
         token: TestNotificationToken,
-        payload: { message: "test" }
+        payload: { message: "test" },
       };
 
       await eventBus.publish(notification);
@@ -131,7 +132,7 @@ describe("EventBus", () => {
         .register(MiddleWareOrderToken, [])
         .registerFactory(IEventBusToken, EventBusFactory)
         .register(TestCommandHandlerToken, {
-          handle: async (cmd) => ({ result: cmd.payload.input.toUpperCase() })
+          handle: async (cmd) => ({ result: cmd.payload.input.toUpperCase() }),
         })
         .getResult();
 
@@ -140,7 +141,7 @@ describe("EventBus", () => {
       const command: ICommand<TestCommandPayload, string> = {
         createdAt: new Date(),
         token: TestCommandToken,
-        payload: { input: "hello" }
+        payload: { input: "hello" },
       };
 
       const result = await eventBus.invoke(command);
@@ -158,7 +159,7 @@ describe("EventBus", () => {
       const command: ICommand<TestCommandPayload, string> = {
         createdAt: new Date(),
         token: TestCommandToken,
-        payload: { input: "hello" }
+        payload: { input: "hello" },
       };
 
       await expect(eventBus.invoke(command)).rejects.toThrow(
@@ -168,34 +169,42 @@ describe("EventBus", () => {
   });
 
   describe("Middlewares", () => {
+    const log: string[] = [];
+
     it("should execute middleware in order", async () => {
       const middleware1Spy = vi.fn().mockImplementation(async (req, next) => {
-        console.log("middleware1 before");
+        log.push("middleware1 before");
         const result = await next(req);
-        console.log("middleware1 after");
+        log.push("middleware1 after");
         return result;
       });
 
       const middleware2Spy = vi.fn().mockImplementation(async (req, next) => {
-        console.log("middleware2 before");
+        log.push("middleware2 before");
         const result = await next(req);
-        console.log("middleware2 after");
+        log.push("middleware2 after");
         return result;
       });
 
-      const handlerSpy = vi.fn();
+      const handlerSpy = vi.fn().mockImplementation(() => {
+        log.push("handler");
+      });
 
-      const Middleware1Token = createDIToken<IHandlerMiddleware<any, any>>()
-        .as("Middleware1", {
+      const Middleware1Token = createDIToken<IHandlerMiddleware<any, any>>().as(
+        "Middleware1",
+        {
           implements: [IHandlerMiddlewareToken],
-          generics: [TestNotificationToken]
-        });
+          generics: [INotificationToken],
+        }
+      );
 
-      const Middleware2Token = createDIToken<IHandlerMiddleware<any, any>>()
-        .as("Middleware2", {
+      const Middleware2Token = createDIToken<IHandlerMiddleware<any, any>>().as(
+        "Middleware2",
+        {
           implements: [IHandlerMiddlewareToken],
-          generics: [TestNotificationToken]
-        });
+          generics: [INotificationToken],
+        }
+      );
 
       const container = buildDIContainer()
         .register(MiddleWareOrderToken, [Middleware1Token, Middleware2Token])
@@ -210,7 +219,7 @@ describe("EventBus", () => {
       const notification: INotification<TestNotificationPayload> = {
         createdAt: new Date(),
         token: TestNotificationToken,
-        payload: { message: "test" }
+        payload: { message: "test" },
       };
 
       await eventBus.publish(notification);
@@ -218,6 +227,13 @@ describe("EventBus", () => {
       expect(middleware1Spy).toHaveBeenCalled();
       expect(middleware2Spy).toHaveBeenCalled();
       expect(handlerSpy).toHaveBeenCalledWith({ message: "test" });
+      expect(log).toEqual([
+        "middleware1 before",
+        "middleware2 before",
+        "handler",
+        "middleware2 after",
+        "middleware1 after",
+      ]);
     });
   });
 });
