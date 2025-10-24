@@ -131,9 +131,13 @@ export interface IEventBus {
    *
    * @template T - The type of the notification payload
    * @param notification - The notification to publish
+   * @param strategy - The publish strategy to use
    * @returns A promise that resolves when all handlers have completed
    */
-  publish<T>(notification: INotification<T>): Promise<void>;
+  publish<T, S extends "parallel" | "sequential" | "besteffort">(
+    notification: INotification<T>,
+    strategy?: S
+  ): Promise<S extends "besteffort" ? Error[] : void>;
 
   /**
    * Invokes a command and returns the result from its handler.
@@ -144,7 +148,7 @@ export interface IEventBus {
    * @param command - The command to invoke
    * @returns A promise that resolves to the command result
    */
-  invoke<T, R>(command: ICommand<T, R>): Promise<R>;
+  invoke<T, R>(req: ICommand<T, R> | IQuery<T, R>): Promise<R>;
 }
 
 /**

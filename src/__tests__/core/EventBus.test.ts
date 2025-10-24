@@ -93,7 +93,7 @@ const TestQueryHandlerToken = createQueryHandlerDIToken<
 describe("EventBus", () => {
   describe("Notifications", () => {
     it("should publish notification to registered handler", async () => {
-      const handlerSpy = vi.fn();
+      const handlerSpy = vi.fn().mockResolvedValue(undefined);
 
       const container = buildDIContainer()
         .register(MiddleWareOrderToken, [])
@@ -115,9 +115,16 @@ describe("EventBus", () => {
       expect(handlerSpy).toHaveBeenCalledWith({ message: "test" });
     });
 
-    it("should publish to multiple handlers", async () => {
-      const handler1Spy = vi.fn();
-      const handler2Spy = vi.fn();
+    it("should publish to multiple handlers in parallel by default", async () => {
+      const handler1Spy = vi.fn().mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return Promise.resolve();
+      });
+
+      const handler2Spy = vi.fn().mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return Promise.resolve();
+      });
 
       const Handler1Token = createNotificationHandlerDIToken<
         INotificationHandler<INotification<TestNotificationPayload>>
@@ -139,17 +146,156 @@ describe("EventBus", () => {
         .getResult();
 
       const eventBus = container.resolve(IEventBusToken);
-
       const notification: INotification<TestNotificationPayload> = {
         createdAt: new Date(),
         token: TestNotificationToken,
         payload: { message: "test" },
       };
 
-      await eventBus.publish(notification);
+      const startTime = Date.now();
+      await eventBus.publish(notification, "parallel");
+      const duration = Date.now() - startTime;
 
+      // Should take approximately the time of the slowest handler (50ms)
+      expect(duration).toBeLessThan(70); // Add some buffer
       expect(handler1Spy).toHaveBeenCalledWith({ message: "test" });
       expect(handler2Spy).toHaveBeenCalledWith({ message: "test" });
+    });
+
+    it("should execute handlers sequentially when strategy is sequential", async () => {
+      const executionOrder: string[] = [];
+
+      const handler1Spy = vi.fn().mockImplementation(async () => {
+        executionOrder.push("handler1 start");
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        executionOrder.push("handler1 end");
+      });
+
+      const handler2Spy = vi.fn().mockImplementation(async () => {
+        executionOrder.push("handler2 start");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        executionOrder.push("handler2 end");
+      });
+
+      const Handler1Token = createNotificationHandlerDIToken<
+        INotificationHandler<INotification<TestNotificationPayload>>
+      >().as("Handler1", {
+        generics: [TestNotificationToken],
+      });
+
+      const Handler2Token = createNotificationHandlerDIToken<
+        INotificationHandler<INotification<TestNotificationPayload>>
+      >().as("Handler2", {
+        generics: [TestNotificationToken],
+      });
+
+      const container = buildDIContainer()
+        .register(MiddleWareOrderToken, [])
+        .registerFactory(IEventBusToken, EventBusFactory)
+        .register(Handler1Token, { handle: handler1Spy })
+        .register(Handler2Token, { handle: handler2Spy })
+        .getResult();
+
+      const eventBus = container.resolve(IEventBusToken);
+      const notification: INotification<TestNotificationPayload> = {
+        createdAt: new Date(),
+        token: TestNotificationToken,
+        payload: { message: "test" },
+      };
+
+      const startTime = Date.now();
+      await eventBus.publish(notification, "sequential");
+      const duration = Date.now() - startTime;
+
+      // Should take the sum of both handler times (30ms + 10ms)
+      expect(duration).toBeGreaterThanOrEqual(35);
+      expect(executionOrder).toEqual([
+        "handler1 start",
+        "handler1 end",
+        "handler2 start",
+        "handler2 end",
+      ]);
+    });
+
+    it("should continue execution on handler error in besteffort strategy", async () => {
+      const handler1Spy = vi
+        .fn()
+        .mockRejectedValue(new Error("Handler 1 failed"));
+      const handler2Spy = vi.fn().mockResolvedValue(undefined);
+
+      const Handler1Token = createNotificationHandlerDIToken<
+        INotificationHandler<INotification<TestNotificationPayload>>
+      >().as("Handler1", {
+        generics: [TestNotificationToken],
+      });
+
+      const Handler2Token = createNotificationHandlerDIToken<
+        INotificationHandler<INotification<TestNotificationPayload>>
+      >().as("Handler2", {
+        generics: [TestNotificationToken],
+      });
+
+      const container = buildDIContainer()
+        .register(MiddleWareOrderToken, [])
+        .registerFactory(IEventBusToken, EventBusFactory)
+        .register(Handler1Token, { handle: handler1Spy })
+        .register(Handler2Token, { handle: handler2Spy })
+        .getResult();
+
+      const eventBus = container.resolve(IEventBusToken);
+      const notification: INotification<TestNotificationPayload> = {
+        createdAt: new Date(),
+        token: TestNotificationToken,
+        payload: { message: "test" },
+      };
+
+      // Should not throw
+      const errors = await eventBus.publish(notification, "besteffort");
+
+      expect(handler1Spy).toHaveBeenCalled();
+      expect(handler2Spy).toHaveBeenCalled();
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toBeInstanceOf(Error);
+      expect(errors[0].message).toBe("Handler 1 failed");
+    });
+
+    it("should stop execution on first error in sequential strategy", async () => {
+      const handler1Spy = vi
+        .fn()
+        .mockRejectedValue(new Error("Handler 1 failed"));
+      const handler2Spy = vi.fn().mockResolvedValue(undefined);
+
+      const Handler1Token = createNotificationHandlerDIToken<
+        INotificationHandler<INotification<TestNotificationPayload>>
+      >().as("Handler1", {
+        generics: [TestNotificationToken],
+      });
+
+      const Handler2Token = createNotificationHandlerDIToken<
+        INotificationHandler<INotification<TestNotificationPayload>>
+      >().as("Handler2", {
+        generics: [TestNotificationToken],
+      });
+
+      const container = buildDIContainer()
+        .register(MiddleWareOrderToken, [])
+        .registerFactory(IEventBusToken, EventBusFactory)
+        .register(Handler1Token, { handle: handler1Spy })
+        .register(Handler2Token, { handle: handler2Spy })
+        .getResult();
+
+      const eventBus = container.resolve(IEventBusToken);
+      const notification: INotification<TestNotificationPayload> = {
+        createdAt: new Date(),
+        token: TestNotificationToken,
+        payload: { message: "test" },
+      };
+
+      await expect(
+        eventBus.publish(notification, "sequential")
+      ).rejects.toThrow("Handler 1 failed");
+      expect(handler1Spy).toHaveBeenCalled();
+      expect(handler2Spy).not.toHaveBeenCalled();
     });
   });
 
@@ -190,7 +336,7 @@ describe("EventBus", () => {
       };
 
       await expect(eventBus.invoke(command)).rejects.toThrow(
-        "Request handler for Request TestCommand not found"
+        "Request handler not found for Request TestCommand"
       );
     });
   });
@@ -237,7 +383,7 @@ describe("EventBus", () => {
         };
 
       await expect(eventBus.invoke(query)).rejects.toThrow(
-        "Request handler for Request TestQuery not found"
+        "Request handler not found for Request TestQuery"
       );
     });
   });
@@ -464,7 +610,7 @@ describe("EventBus", () => {
 
         // Resolve the event bus to trigger the factory and validation
         container.resolve(IEventBusToken);
-      }).toThrow("Command handler InvalidHandler is missing Command generic");
+      }).toThrow("Request handler InvalidHandler is missing generic Token");
     });
 
     it("should throw error when middleware is missing generics", () => {
@@ -507,7 +653,7 @@ describe("EventBus", () => {
         // Resolve the event bus to trigger the factory and validation
         container.resolve(IEventBusToken);
       }).toThrow(
-        "Command handler Handler2 is already registered for Command TestCommand"
+        "Request handler Handler2 is already registered for Token TestCommand"
       );
     });
   });

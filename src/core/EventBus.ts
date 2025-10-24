@@ -97,13 +97,13 @@ export const EventBusFactory = withDependencies(
       const commandToken = token.metadata?.generics?.[0];
       if (!commandToken) {
         throw new Error(
-          `Command handler ${token.key} is missing Command generic`
+          `Request handler ${token.key} is missing generic Token`
         );
       }
 
       if (requestsState[commandToken.key]) {
         throw new Error(
-          `Command handler ${token.key} is already registered for Command ${commandToken.key}`
+          `Request handler ${token.key} is already registered for Token ${commandToken.key}`
         );
       }
       requestsState[commandToken.key] = token;
@@ -158,7 +158,7 @@ export const EventBusFactory = withDependencies(
      */
     const createMiddlewarePipeline = (
       middlewares: DIToken<IHandlerMiddleware<any, any>>[],
-      executeHandler: (request: unknown) => Promise<unknown>
+      executeHandler: (request: unknown) => Promise<any>
     ) => {
       const orderedMiddlewares = middlewares.length
         ? middlewareOrder.filter((token) => middlewares.includes(token))
@@ -174,12 +174,12 @@ export const EventBusFactory = withDependencies(
     };
 
     /**
-     * Executes all notification handlers for the given handlers array with the provided payload.
+     * Executes all notification handlers sequentially for the given handlers array with the provided payload.
      *
      * @param handlers - Array of handler tokens to execute, or undefined if no handlers
      * @param payload - The payload to pass to each notification handler
      */
-    const executeNotificationHandlers = async (
+    const executeNotificationHandlersSequentially = async (
       handlers: DIToken<any>[] | undefined,
       payload: unknown
     ) => {
@@ -192,20 +192,74 @@ export const EventBusFactory = withDependencies(
       }
     };
 
+    /**
+     * Executes all notification handlers in parallel for the given handlers array with the provided payload.
+     *
+     * @param handlers - Array of handler tokens to execute, or undefined if no handlers
+     * @param payload - The payload to pass to each notification handler
+     */
+    const executeNotificationHandlersInParallel = async (
+      handlers: DIToken<any>[] | undefined,
+      payload: unknown
+    ) => {
+      if (handlers !== undefined) {
+        await Promise.all(
+          handlers.map(
+            async (handler) =>
+              await container
+                .resolve(handler as DIToken<INotificationHandler<any>>)
+                .handle(payload)
+          )
+        );
+      }
+    };
+
+    /**
+     * Executes all notification handlers in parallel for the given handlers array with the provided payload, but wont stop on error.
+     *
+     * @param handlers - Array of handler tokens to execute, or undefined if no handlers
+     * @param payload - The payload to pass to each notification handler
+     */
+    const executeNotificationHandlersBestEffort = async (
+      handlers: DIToken<any>[] | undefined,
+      payload: unknown
+    ) => {
+      if (!handlers || handlers.length === 0) {
+        return [];
+      }
+
+      const errors: Error[] = [];
+
+      await Promise.all(
+        handlers.map(async (handler) => {
+          try {
+            const handlerInstance = container.resolve(
+              handler as DIToken<INotificationHandler<any>>
+            );
+            await handlerInstance.handle(payload);
+          } catch (error) {
+            errors.push(error as Error);
+          }
+        })
+      );
+
+      return errors;
+    };
+
     return {
-      async invoke<T, R>(command: ICommand<T, R>): Promise<R> {
-        const handlerToken = requestsState[command.token.key];
+      async invoke(req) {
+        const handlerToken = requestsState[req.token.key];
 
         if (!handlerToken) {
           throw new Error(
-            `Request handler for Request ${command.token.key} not found`
+            `Request handler not found for Request ${req.token.key}`
           );
         }
 
         const handler: { handle: (value: any) => any } =
           container.resolve(handlerToken);
 
-        const middlewares = findMiddlewaresForToken(command.token);
+        const middlewares = findMiddlewaresForToken(req.token);
 
         const pipeline = createMiddlewarePipeline(
           middlewares,
@@ -214,14 +268,14 @@ export const EventBusFactory = withDependencies(
           }
         );
 
-        return pipeline(command) as Promise<R>;
+        return pipeline(req);
       },
       /**
        * Publishes a notification with the given payload.
        * @param notification The notification to publish.
        * @returns A promise that resolves when all notification handlers have been executed.
        */
-      async publish<T>(notification: INotification<T>): Promise<void> {
+      async publish(notification, strategy = "besteffort" as any) {
         const handlers = notificationsState[notification.token.key];
 
         const middlewares = findMiddlewaresForToken(notification.token);
@@ -229,11 +283,31 @@ export const EventBusFactory = withDependencies(
         const pipeline = createMiddlewarePipeline(
           middlewares,
           async (request) => {
-            await executeNotificationHandlers(handlers, notification.payload);
+            switch (strategy) {
+              case "parallel":
+                return await executeNotificationHandlersInParallel(
+                  handlers,
+                  notification.payload
+                );
+              case "sequential":
+                return await executeNotificationHandlersSequentially(
+                  handlers,
+                  notification.payload
+                );
+              case "besteffort":
+                return await executeNotificationHandlersBestEffort(
+                  handlers,
+                  notification.payload
+                );
+              default:
+                throw new Error(`Invalid publish strategy: ${strategy}`);
+            }
           }
         );
 
-        await pipeline(notification);
+        return (await pipeline(notification)) as Promise<
+          typeof strategy extends "besteffort" ? Error[] : void
+        >;
       },
     };
   }
