@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@fioc/core':
-        specifier: ^1.7.1
-        version: 1.7.1
+        specifier: ^1.7.2
+        version: 1.7.2
       immer:
         specifier: ^10.1.1
         version: 10.1.1
@@ -273,8 +273,8 @@ packages:
     resolution: {integrity: sha512-Z5kJ+wU3oA7MMIqVR9tyZRtjYPr4OC004Q4Rw7pgOKUOKkJfZ3O24nz3WYfGRpMDNmcOi3TwQOmgm7B7Tpii0w==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@fioc/core@1.7.1':
-    resolution: {integrity: sha512-uFF0sVSAaG6J2NaSzJ+Vf++QQMaQ6y889RioGga+f0bQe4DIs9aQrqqZ+C01bEhbCD0F//ml3GGfQ5HsRkKQ7g==}
+  '@fioc/core@1.7.2':
+    resolution: {integrity: sha512-fCS/vmHCPYW/OXFVFpwEu9Ri9y3fqqBswPlRXoQXlFNtGb2xORkxn+oT5/LatLdzVOUEZq9fFd/D9R71VryCHg==}
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -1579,7 +1579,7 @@ snapshots:
       '@eslint/core': 0.15.2
       levn: 0.4.1
 
-  '@fioc/core@1.7.1':
+  '@fioc/core@1.7.2':
     dependencies:
       immer: 10.1.1
 
