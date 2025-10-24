@@ -1,10 +1,9 @@
 # @fioc/event-bus
 
-**FIoC Event Bus** is a lightweight, type-safe event-driven architecture library for **TypeScript** and **JavaScript**, built on top of **FIoC (Fluid Inversion of Control)**. It simplifies event handling with **notifications** (publish-subscribe), **commands** (request-response), and **middlewares**, all integrated with FIoC's dependency injection container.
+**FIoC Event Bus** provides a comprehensive, type-safe event-driven architecture system built on top of [`@fioc/core`](https://www.npmjs.com/package/@fioc/core).  
+It enables CQRS (Command Query Responsibility Segregation), domain events, and event-driven patterns with full dependency injection integration — completely reflection-free and decorator-free.
 
-It enables decoupled communication between components, making your applications more modular and maintainable.
-
-> 💡 Built on FIoC's fluid DI, it leverages type-safe tokens and metadata for seamless handler registration and resolution.
+> 💡 Built for complex event-driven architectures, microservices, and domain-driven design — without reflection or decorators.
 
 ---
 
@@ -13,354 +12,416 @@ It enables decoupled communication between components, making your applications 
 Install via npm, yarn, or pnpm:
 
 ```bash
-npm install @fioc/event-bus
+npm install @fioc/event-bus @fioc/core
 
 # or
 
-yarn add @fioc/event-bus
+yarn add @fioc/event-bus @fioc/core
 
 # or
 
-pnpm add @fioc/event-bus
+pnpm add @fioc/event-bus @fioc/core
 ```
-
-A minimal “Hello World” example (with inference comments):
-
-```ts
-import { buildDIContainer, createDIToken } from "@fioc/core";
-import { EventBusFactory, IEventBusToken, MiddleWareOrderToken, createNotificationDIToken, createNotificationHandlerDIToken } from "@fioc/event-bus";
-
-interface UserCreatedPayload {
-  userId: string;
-  email: string;
-}
-
-const UserCreatedToken = createNotificationDIToken<UserCreatedPayload>()
-  .as("UserCreated");
-
-const LoggerHandlerToken = createNotificationHandlerDIToken<INotification<UserCreatedPayload>, void>()
-  .as("LoggerHandler", {
-    generics: [UserCreatedToken]
-  });
-
-const container = buildDIContainer()
-  .register(MiddleWareOrderToken, [])
-  .registerFactory(IEventBusToken, EventBusFactory)
-  .register(LoggerHandlerToken, {
-    handle: (payload: INotification<UserCreatedPayload>) => console.log(`User created: ${payload.payload.email}`)
-  })
-  .getResult();
-
-const eventBus = container.resolve(IEventBusToken);
-
-const notification = {
-  createdAt: new Date(),
-  token: UserCreatedToken,
-  payload: { userId: "123", email: "user@example.com" }
-};
-
-await eventBus.publish(notification); // Logs: User created: user@example.com
-```
-
----
-
-## ✨ Features
-
-- 🪶 **Lightweight & Type-Safe** — zero reflection, built on FIoC's tree-shakeable DI.
-- 📡 **Notifications (Publish-Subscribe)** — broadcast events to multiple handlers asynchronously.
-- ⚡ **Commands (Request-Response)** — invoke handlers synchronously with return values.
-- 🛡️ **Middlewares** — chainable middleware with hierarchical discovery (specific → general).
-- 🎯 **Automatic Handler Discovery** — uses FIoC's metadata to find and resolve handlers.
-- 🔄 **Immutable Integration** — works seamlessly with FIoC's scopes and containers.
-- 🔌 **Universal** — compatible with Node.js, browser, Deno, Bun, and serverless.
-- 🧩 **Composable** — merge event buses or swap configurations dynamically.
-- 🏗️ **Factory Pattern** — clean dependency injection with `EventBusFactory`.
-- 🛠️ **Utility Functions** — helper functions for creating tokens: `createNotificationDIToken`, `createCommandDIToken`, `createNotificationHandlerDIToken`, `createCommandHandlerDIToken`, `createMiddlewareDIToken`.
-- 🔗 **FIoC Ecosystem** — integrates with:
-    - [`@fioc/react`](https://www.npmjs.com/package/@fioc/react)
-    - [`@fioc/next`](https://www.npmjs.com/package/@fioc/next)
 
 ---
 
 ## 📘 Table of Contents
 
 - [Quick Start](#-quick-start)
-- [Creating Notifications](#creating-notifications)
-- [Creating Commands](#creating-commands)
-- [Registering Handlers](#registering-handlers)
-- [Publishing Notifications](#publishing-notifications)
-- [Invoking Commands](#invoking-commands)
-- [Middlewares](#middlewares)
-- [Event Bus Factory](#event-bus-factory)
-- [Why FIoC Event Bus?](#why-fioc-event-bus)
-- [Contributing](#contributing)
-- [License](#license)
+- [Core Concepts](#-core-concepts)
+- [Defining Events & Commands](#-defining-events--commands)
+- [Creating Handlers](#-creating-handlers)
+- [Using the Event Bus](#-using-the-event-bus)
+- [Middleware & Interceptors](#-middleware--interceptors)
+- [Execution Strategies](#-execution-strategies)
+- [Metadata & Token Discovery](#-metadata--token-discovery)
+- [Integration with FIoC Containers](#-integration-with-fioc-containers)
+- [API Reference](#-api-reference)
+- [Examples](#-examples)
+- [Contributing](#-contributing)
+- [License](#-license)
 
 ---
 
-## 🔔 Creating Notifications
+## 🧩 Core Concepts
 
-Notifications represent events that can be published to multiple subscribers.
+The Event Bus package introduces several key abstractions for building event-driven applications:
 
-```ts
+| Concept                | Description                                                         |
+| ---------------------- | ------------------------------------------------------------------- |
+| **INotification**      | Domain events that can have multiple handlers                       |
+| **ICommand**           | Commands that perform actions (single handler)                      |
+| **IQuery**             | Queries that retrieve data (single handler)                         |
+| **IEventBus**          | Central service for publishing events and invoking commands/queries |
+| **IHandlerMiddleware** | Interceptors for cross-cutting concerns                             |
+
+Everything is **fully typed**, **DI-integrated**, and **metadata-aware** — no decorators, no `reflect-metadata`.
+
+---
+
+## 🔔 Defining Events & Commands
+
+### Notifications (Domain Events)
+
+```typescript
 import { createNotificationDIToken } from "@fioc/event-bus";
 
-interface OrderPlacedNotification {
-  orderId: string;
-  amount: number;
-}
+// Define notification payload type
+export type UserRegisteredPayload = {
+  userId: string;
+  email: string;
+  timestamp: Date;
+};
 
-const OrderPlacedToken = createNotificationDIToken<OrderPlacedNotification>()
-  .as("OrderPlaced");
+export interface UserRegisteredNotification
+  extends INotification<UserRegisteredPayload> {}
+
+// Create notification token
+export const UserRegisteredNotificationToken =
+  createNotificationDIToken<UserRegisteredNotification>().as("UserRegistered", {
+    generics: [
+      /* Optional payload token */
+    ],
+  });
 ```
 
----
+### Commands
 
-## ⚡ Creating Commands
-
-Commands are request-response messages handled by a single handler.
-
-```ts
+```typescript
 import { createCommandDIToken } from "@fioc/event-bus";
 
-interface CreateUserCommand {
+export type CreateUserCommandPayload = {
   email: string;
+  password: string;
   name: string;
-}
+};
 
-const CreateUserToken = createCommandDIToken<CreateUserCommand, { userId: string; success: boolean }>()
-  .as("CreateUser");
+export interface CreateUserCommand
+  extends ICommand<CreateUserCommandPayload, string> {}
+
+export const CreateUserCommandToken =
+  createCommandDIToken<CreateUserCommand>().as("CreateUser");
+```
+
+### Queries
+
+```typescript
+import { createQueryDIToken } from "@fioc/event-bus";
+
+export type GetUserByIdQueryPayload = {
+  userId: string;
+};
+
+export interface GetUserByIdQuery
+  extends IQuery<GetUserByIdQueryPayload, User> {}
+
+export const GetUserByIdQuery =
+  createQueryDIToken<GetUserByIdQuery>().as("GetUserById");
 ```
 
 ---
 
-## 🛠️ Registering Handlers
+## 🛠️ Creating Handlers
 
-Handlers are registered as FIoC tokens with metadata linking them to notifications or commands.
+### Notification Handlers (Multiple per Event)
 
-### Notification Handler
+```typescript
+import { createNotificationHandlerDIToken } from "@fioc/event-bus";
+import { UserRegisteredNotification } from "./events";
 
-```ts
-import { createNotificationDIToken, createNotificationHandlerDIToken } from "@fioc/event-bus";
+export interface SendWelcomeEmailHandler
+  extends INotificationHandler<UserRegisteredNotification> {}
 
-const OrderPlacedToken = createNotificationDIToken<OrderPlacedNotification>()
-  .as("OrderPlaced");
-
-const EmailNotificationHandlerToken = createNotificationHandlerDIToken<OrderPlacedNotification, void>()
-  .as("EmailNotificationHandler", {
-    generics: [OrderPlacedToken]
+export const SendWelcomeEmailHandlerToken =
+  createNotificationHandlerDIToken().as("SendWelcomeEmail", {
+    generics: [UserRegisteredNotificationToken], // Needs to specify the notification token
   });
 
+// Implementation
+const sendWelcomeEmailHandlerImpl: SendWelcomeEmailHandler = {
+  async handle(payload) {
+    await emailService.sendWelcomeEmail(event.payload.email);
+  },
+};
+```
+
+### Command Handlers (Single per Command)
+
+```typescript
+import { createCommandHandlerDIToken } from "@fioc/event-bus";
+import { CreateUserCommand } from "./commands";
+
+export interface CreateUserHandler extends ICommandHandler<CreateUserCommand> {}
+
+export const CreateUserHandlerToken = createCommandHandlerDIToken().as(
+  "CreateUserHandler",
+  {
+    generics: [CreateUserCommandToken], // Needs to specify the command token
+  }
+);
+
+// Implementation
+const createUserHandlerImpl: CreateUserHandler = {
+  async handle(command: { payload: CreateUserCommandPayload }) {
+    const user = await userService.createUser(command.payload);
+    return user.id; // Must match command result type
+  },
+};
+```
+
+### Query Handlers (Single per Query)
+
+```typescript
+import { createQueryHandlerDIToken } from "@fioc/event-bus";
+import { GetUserByIdQuery } from "./queries";
+
+export interface GetUserByIdHandler extends IQueryHandler<GetUserByIdQuery> {}
+
+export const GetUserByIdHandlerToken = createQueryHandlerDIToken().as(
+  "GetUserByIdHandler",
+  {
+    generics: [GetUserByIdQueryToken], // Needs to specify the query token
+  }
+);
+
+// Implementation
+const getUserByIdHandlerImpl: GetUserByIdHandler = {
+  async handle(query: { payload: GetUserByIdQueryPayload }) {
+    return await userRepository.findById(query.payload.userId);
+  },
+};
+```
+
+---
+
+## 📡 Using the Event Bus
+
+### Basic Setup
+
+```typescript
+import { buildDIContainer } from "@fioc/core";
+import { EventBusFactory, IEventBusToken } from "@fioc/event-bus";
+
 const container = buildDIContainer()
-  .register(MiddleWareOrderToken, [])
   .registerFactory(IEventBusToken, EventBusFactory)
-  .register(EmailNotificationHandlerToken, {
-    handle: (payload: OrderPlacedNotification) => {
-      // Send email logic
-      console.log(`Email sent for order ${payload.orderId}`);
-    }
-  })
+  .register(SendWelcomeEmailHandlerToken, sendWelcomeEmailHandler)
+  .register(CreateUserHandlerToken, createUserHandler)
+  .register(GetUserByIdHandlerToken, getUserByIdHandler)
   .getResult();
 
 const eventBus = container.resolve(IEventBusToken);
 ```
 
-### Command Handler
+### Publishing Notifications
 
-```ts
-import { createCommandDIToken, createCommandHandlerDIToken } from "@fioc/event-bus";
-
-const CreateUserToken = createCommandDIToken<CreateUserCommand, { userId: string; success: boolean }>()
-  .as("CreateUser");
-
-const CreateUserHandlerToken = createCommandHandlerDIToken<ICommand<CreateUserCommand, { userId: string; success: boolean }>, { userId: string; success: boolean }>()
-  .as("CreateUserHandler", {
-    generics: [CreateUserToken]
-  });
-
-const container = buildDIContainer()
-  .register(MiddleWareOrderToken, [])
-  .registerFactory(IEventBusToken, EventBusFactory)
-  .register(CreateUserHandlerToken, {
-    handle: async (command: CreateUserCommand) => {
-      // Create user logic
-      return { userId: "123", success: true };
-    }
-  })
-  .getResult();
-
-const eventBus = container.resolve(IEventBusToken);
-```
-
----
-
-## 📡 Publishing Notifications
-
-Publish notifications to trigger all registered handlers asynchronously.
-
-```ts
-const eventBus = container.resolve(IEventBusToken);
-
-const notification = {
+```typescript
+// Publish a domain event
+await eventBus.publish({
+  token: UserRegisteredNotification,
+  payload: {
+    userId: "123",
+    email: "user@example.com",
+    timestamp: new Date(),
+  },
   createdAt: new Date(),
-  token: OrderPlacedToken,
-  payload: { orderId: "456", amount: 99.99 }
-};
+});
 
-await eventBus.publish(notification); // All handlers for OrderPlaced will execute
+// With different execution strategies
+await eventBus.publish(notification, "parallel"); // All handlers run concurrently
+await eventBus.publish(notification, "sequential"); // Handlers run one after another
+await eventBus.publish(notification, "besteffort"); // Parallel but continue on handler errors
 ```
 
----
+### Invoking Commands & Queries
 
-## ⚡ Invoking Commands
-
-Invoke commands to get a response from the single registered handler.
-
-```ts
-const eventBus = container.resolve(IEventBusToken);
-
-const command = {
+```typescript
+// Invoke a command
+const userId = await eventBus.invoke({
+  token: CreateUserCommand,
+  payload: {
+    email: "user@example.com",
+    password: "securepassword",
+    name: "John Doe",
+  },
   createdAt: new Date(),
-  token: CreateUserToken,
-  payload: { email: "new@example.com", name: "John Doe" }
-};
+});
 
-const result = await eventBus.invoke(command); // result: { userId: "123", success: true }
+// Invoke a query
+const user = await eventBus.invoke({
+  token: GetUserByIdQuery,
+  payload: { userId: "123" },
+  createdAt: new Date(),
+});
 ```
 
 ---
 
-## 🛡️ Middlewares
+## 🔌 Middleware & Interceptors
 
-Middlewares allow chaining logic before and after handler execution.
+Middleware allows you to implement cross-cutting concerns like logging, validation, and error handling.
 
-```ts
-import { createMiddlewareDIToken } from "@fioc/event-bus";
+### Creating Middleware
 
-const LoggingMiddlewareToken = createMiddlewareDIToken<INotification<OrderPlacedNotification>, void>()
-  .as("LoggingMiddleware", {
-    generics: [OrderPlacedToken]
-  });
+```typescript
+import { createMiddlewareDIToken, IQueryToken, ICommandToken } from "@fioc/event-bus";
 
-const container = buildDIContainer()
-  .register(MiddleWareOrderToken, [LoggingMiddlewareToken])
-  .registerFactory(IEventBusToken, EventBusFactory)
-  .register(LoggingMiddlewareToken, {
-    handle: async (req, next) => {
-      console.log("Before handler");
-      const result = await next(req);
-      console.log("After handler");
+export interface LoggingMiddleware extends IHandlerMiddleware<IQuery<any> | ICommand<any> ,unknown>
+
+export const LoggingMiddleware = createMiddlewareDIToken().as(
+  "LoggingMiddleware",
+  {
+    generics: [IQueryToken, ICommandToken], // Apply to all commands and queries
+  }
+);
+
+const loggingMiddleware = {
+  async handle(request, next: (request: any) => Promise<any>) {
+    console.log("Processing request:", request.token.key);
+    const startTime = Date.now();
+
+    try {
+      const result = await next(request);
+      console.log("Request completed in", Date.now() - startTime, "ms");
       return result;
+    } catch (error) {
+      console.error("Request failed:", error);
+      throw error;
     }
-  })
-  .getResult();
-
-const eventBus = container.resolve(IEventBusToken);
+  },
+};
 ```
 
----
+### Middleware Registration & Ordering
 
-## 🏗️ Event Bus Factory
-
-The `EventBusFactory` creates an event bus instance through FIoC's dependency injection system. Register it as a factory and resolve the `IEventBusToken` to get the event bus instance.
-
-```ts
-import { EventBusFactory, IEventBusToken, MiddleWareOrderToken } from "@fioc/event-bus";
+```typescript
+import { MiddleWareOrderToken } from "@fioc/event-bus";
 
 const container = buildDIContainer()
-  .register(MiddleWareOrderToken, []) // Register middleware order
-  .registerFactory(IEventBusToken, EventBusFactory) // Register the factory
-  // ... register handlers and middlewares
+  .register(MiddleWareOrderToken, [LoggingMiddleware, ValidationMiddleware]) // Middleware Order declaration
+  .registerFactory(IEventBusToken, EventBusFactory)
+  .register(LoggingMiddleware, loggingMiddleware)
+  .register(ValidationMiddleware, validationMiddleware)
   .getResult();
+```
 
-const eventBus = container.resolve(IEventBusToken); // Get the event bus instance
+### Applying Middleware to Specific Event Types
+
+```typescript
+// Apply to all notifications
+const NotificationLoggingMiddleware = createMiddlewareDIToken().as(
+  "NotificationLogging",
+  {
+    generics: [INotificationToken], // Apply to all notifications
+  }
+);
+
+// Apply to specific notification
+const UserEventMiddleware = createMiddlewareDIToken().as(
+  "UserEventMiddleware",
+  {
+    generics: [UserRegisteredNotification], // Apply only to user registration
+  }
+);
+
+// Apply to multiple types
+const CommandQueryMiddleware = createMiddlewareDIToken().as(
+  "CommandQueryMiddleware",
+  {
+    generics: [ICommandToken, IQueryToken], // Apply to all commands and queries
+  }
+);
 ```
 
 ---
 
-## 🛠️ Utility Functions
+## ⚡ Execution Strategies
 
-The event bus provides helper functions to simplify token creation and automatically handle the correct implements metadata:
+The event bus supports different execution strategies for notification handlers:
 
-```ts
-import {
-  createNotificationDIToken,
-  createCommandDIToken,
-  createNotificationHandlerDIToken,
-  createCommandHandlerDIToken,
-  createMiddlewareDIToken
-} from "@fioc/event-bus";
+### Parallel (Default)
 
-// Create notification tokens
-const UserRegisteredToken = createNotificationDIToken<UserRegisteredEvent>()
-  .as("UserRegistered");
-
-// Create command tokens
-const CreateOrderToken = createCommandDIToken<CreateOrderCommand, OrderResult>()
-  .as("CreateOrder");
-
-// Create handler tokens
-const EmailHandlerToken = createNotificationHandlerDIToken<UserRegisteredEvent, void>()
-  .as("EmailHandler", { generics: [UserRegisteredToken] });
-
-const OrderHandlerToken = createCommandHandlerDIToken<ICommand<CreateOrderCommand, OrderResult>, OrderResult>()
-  .as("OrderHandler", { generics: [CreateOrderToken] });
-
-// Create middleware tokens
-const LoggingMiddlewareToken = createMiddlewareDIToken<INotification<UserRegisteredEvent>, void>()
-  .as("LoggingMiddleware", { generics: [UserRegisteredToken] });
+```typescript
+await eventBus.publish(notification, "parallel");
 ```
 
-These utilities automatically set up the correct implements metadata, eliminating boilerplate code.
+- All handlers execute concurrently
+- Fastest execution time
+- Use when handlers are independent
+
+### Sequential
+
+```typescript
+await eventBus.publish(notification, "sequential");
+```
+
+- Handlers execute one after another
+- Guaranteed order of execution
+- Use when handlers have dependencies
+
+### Best Effort (Default)
+
+```typescript
+const errors = await eventBus.publish(notification, "besteffort");
+```
+
+- All handlers execute concurrently
+- Continues execution even if some handlers fail
+- Returns array of errors from failed handlers
+- Use for non-critical background tasks
 
 ---
 
-## 🏛️ Architecture & Code Structure
-
-The event bus is implemented as a FIoC factory with several key components:
-
-### Core Components
-- **EventBusFactory**: Main factory function that creates the event bus instance
-- **Handler Discovery**: Automatic resolution of handlers based on token metadata
-- **Middleware Pipeline**: Chainable middleware execution with proper ordering
-- **Token Hierarchy**: Support for specific and general token matching
-
-### Key Features
-- **Hierarchical Middleware Discovery**: Middlewares can be registered for specific event types or general interfaces
-- **Type-Safe Handler Resolution**: Full TypeScript inference for all operations
-- **Immutable State Management**: Clean separation of registration and execution phases
-- **Composable Architecture**: Easy to extend with new handler types or middleware patterns
-
-### Implementation Details
-The factory uses helper functions for common operations:
-- `findMiddlewaresForToken()`: Discovers applicable middlewares by traversing token inheritance
-- `createMiddlewarePipeline()`: Builds the middleware execution chain
-- `executeNotificationHandlers()`: Handles notification broadcasting to multiple subscribers
-
 ---
 
-## 🧩 Why FIoC Event Bus?
+## 📚 API Reference
 
-### Pros
+### Core Tokens
 
-- **Type-Safe Event Handling** — Full TypeScript inference for notifications, commands, and handlers.
-- **Decoupled Architecture** — Publish-subscribe and command patterns reduce coupling.
-- **Middleware Support** — Flexible pre/post-processing for cross-cutting concerns.
-- **FIoC Integration** — Leverages FIoC's metadata for automatic handler discovery.
-- **Immutable & Safe** — Works with FIoC's scopes for isolated event handling.
-- **Tree-Shakeable** — No runtime overhead, built on FIoC's principles.
+| Token                       | Description                               |
+| --------------------------- | ----------------------------------------- |
+| `IEventBusToken`            | The main event bus service                |
+| `MiddleWareOrderToken`      | Array defining middleware execution order |
+| `INotificationToken`        | Base token for all notifications          |
+| `ICommandToken`             | Base token for all commands               |
+| `IQueryToken`               | Base token for all queries                |
+| `INotificationHandlerToken` | Base token for notification handlers      |
+| `ICommandHandlerToken`      | Base token for command handlers           |
+| `IQueryHandlerToken`        | Base token for query handlers             |
+| `IHandlerMiddlewareToken`   | Base token for middleware                 |
 
-### Cons
+### Factory Functions
 
-- **Requires FIoC** — Depends on FIoC container for handler resolution.
-- **Metadata-Heavy** — Uses generics and implements for type-safe resolution.
+| Function                             | Description                         |
+| ------------------------------------ | ----------------------------------- |
+| `createNotificationDIToken()`        | Creates notification tokens         |
+| `createCommandDIToken()`             | Creates command tokens              |
+| `createQueryDIToken()`               | Creates query tokens                |
+| `createNotificationHandlerDIToken()` | Creates notification handler tokens |
+| `createCommandHandlerDIToken()`      | Creates command handler tokens      |
+| `createQueryHandlerDIToken()`        | Creates query handler tokens        |
+| `createMiddlewareDIToken()`          | Creates middleware tokens           |
+
+### Interfaces
+
+| Interface                  | Description                    |
+| -------------------------- | ------------------------------ |
+| `IEventBus`                | Main event bus interface       |
+| `INotification<T>`         | Domain event interface         |
+| `ICommand<T, R>`           | Command interface              |
+| `IQuery<T, R>`             | Query interface                |
+| `INotificationHandler<T>`  | Notification handler interface |
+| `ICommandHandler<T>`       | Command handler interface      |
+| `IQueryHandler<T>`         | Query handler interface        |
+| `IHandlerMiddleware<T, R>` | Middleware interface           |
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome!
-Feel free to open issues or submit pull requests on [GitHub](https://github.com/kolostring/fioc). Please include tests for behavioral changes and keep changes small and focused.
+Contributions are welcome!  
+Open an issue or submit a PR on [GitHub](https://github.com/kolostring/fioc).
+
+Please include tests for new features or fixes and keep commits focused.
 
 ---
 
