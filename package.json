@@ -17,6 +17,14 @@
     }
   },
   "keywords": [
+    "event-bus",
+    "event-driven",
+    "cqrs",
+    "domain-events",
+    "command-pattern",
+    "query-pattern",
+    "mediator-pattern",
+    "event-sourcing",
     "dependency injection",
     "di container",
     "typescript",
@@ -25,10 +33,15 @@
     "fluent api",
     "tree-shakeable",
     "modular di",
-    "react",
-    "nextjs"
+    "middleware",
+    "interceptors",
+    "domain-driven-design",
+    "ddd",
+    "microservices",
+    "event-handlers",
+    "type-safe"
   ],
-  "description": "Fluent, type-safe IoC container for JS/TS, simplifying dependency management in React, Next.js, and Node.js projects",
+  "description": "Type-safe event bus with CQRS support for FIoC. Build event-driven architectures with commands, queries, notifications, and middleware - fully integrated with dependency injection.",
   "author": "kolostring <yoerodriguezjunior@gmail.com>",
   "contributors": [
     {
