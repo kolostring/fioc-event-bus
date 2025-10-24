@@ -6,6 +6,8 @@ import {
   createCommandDIToken,
   createNotificationHandlerDIToken,
   createCommandHandlerDIToken,
+  createQueryDIToken,
+  createQueryHandlerDIToken,
   createMiddlewareDIToken,
 } from "../../core/EventBus.js";
 import {
@@ -14,9 +16,13 @@ import {
   IHandlerMiddlewareToken,
   INotification,
   ICommand,
+  IQuery,
+  IQueryHandler,
   MiddleWareOrderToken,
   IEventBusToken,
   INotificationToken,
+  ICommandToken,
+  IQueryToken,
   INotificationHandler,
   ICommandHandler,
 } from "../../core/IEventBus.js";
@@ -29,27 +35,11 @@ type TestNotificationPayload = {
 const TestNotificationPayloadToken =
   createDIToken<TestNotificationPayload>().as("TestNotificationPayload");
 
-// Test command payload type
-type TestCommandPayload = {
-  input: string;
-};
-
-const TestCommandPayloadToken =
-  createDIToken<TestCommandPayload>().as("TestCommandPayload");
-
 // Test notification token
 const TestNotificationToken = createNotificationDIToken<
   INotification<TestNotificationPayload>
 >().as("TestNotification", {
   generics: [TestNotificationPayloadToken],
-});
-
-// Test command token
-const TestCommandToken = createCommandDIToken<
-  ICommand<TestCommandPayload, string>,
-  string
->().as("TestCommand", {
-  generics: [TestCommandPayloadToken],
 });
 
 // Test notification handler
@@ -59,11 +49,45 @@ const TestNotificationHandlerToken = createNotificationHandlerDIToken<
   generics: [TestNotificationToken],
 });
 
+// Test command payload type
+type TestCommandPayload = {
+  input: string;
+};
+
+const TestCommandPayloadToken =
+  createDIToken<TestCommandPayload>().as("TestCommandPayload");
+
+// Test command token
+const TestCommandToken = createCommandDIToken<
+  ICommand<TestCommandPayload, string>,
+  string
+>().as("TestCommand", {
+  generics: [TestCommandPayloadToken],
+});
+
 // Test command handler
 const TestCommandHandlerToken = createCommandHandlerDIToken<
   ICommandHandler<ICommand<TestCommandPayload, string>>
 >().as("TestCommandHandler", {
   generics: [TestCommandToken],
+});
+
+// Test query payload type
+type TestQueryPayload = {
+  id: string;
+};
+
+// Test query token
+const TestQueryToken =
+  createQueryDIToken<
+    IQuery<TestQueryPayload, { data: string; found: boolean }>
+  >().as("TestQuery");
+
+// Test query handler
+const TestQueryHandlerToken = createQueryHandlerDIToken<
+  IQueryHandler<IQuery<TestQueryPayload, { data: string; found: boolean }>>
+>().as("TestQueryHandler", {
+  generics: [TestQueryToken],
 });
 
 describe("EventBus", () => {
@@ -166,7 +190,54 @@ describe("EventBus", () => {
       };
 
       await expect(eventBus.invoke(command)).rejects.toThrow(
-        "Command handler for Command TestCommand not found"
+        "Request handler for Request TestCommand not found"
+      );
+    });
+  });
+
+  describe("Queries", () => {
+    it("should invoke query and return result", async () => {
+      const container = buildDIContainer()
+        .register(MiddleWareOrderToken, [])
+        .registerFactory(IEventBusToken, EventBusFactory)
+        .register(TestQueryHandlerToken, {
+          handle: async (query) => ({
+            data: `Found: ${query.payload.id}`,
+            found: true,
+          }),
+        })
+        .getResult();
+
+      const eventBus = container.resolve(IEventBusToken);
+
+      const query: IQuery<TestQueryPayload, { data: string; found: boolean }> =
+        {
+          createdAt: new Date(),
+          token: TestQueryToken,
+          payload: { id: "123" },
+        };
+
+      const result = await eventBus.invoke(query);
+
+      expect(result).toEqual({ data: "Found: 123", found: true });
+    });
+
+    it("should throw error if query handler not found", async () => {
+      const container = buildDIContainer()
+        .register(MiddleWareOrderToken, [])
+        .registerFactory(IEventBusToken, EventBusFactory)
+        .getResult();
+      const eventBus = container.resolve(IEventBusToken);
+
+      const query: IQuery<TestQueryPayload, { data: string; found: boolean }> =
+        {
+          createdAt: new Date(),
+          token: TestQueryToken,
+          payload: { id: "123" },
+        };
+
+      await expect(eventBus.invoke(query)).rejects.toThrow(
+        "Request handler for Request TestQuery not found"
       );
     });
   });
@@ -298,6 +369,62 @@ describe("EventBus", () => {
         "middleware2 after",
         "middleware1 after",
       ]);
+    });
+
+    it("should execute middlewares for both commands and queries", async () => {
+      // Middleware that applies to all commands and queries
+      const LoggingMiddlewareToken = createMiddlewareDIToken<any, any>().as(
+        "LoggingMiddleware",
+        {
+          generics: [ICommandToken, IQueryToken], // Applies to both commands and queries
+        }
+      );
+
+      const middlewareSpy = vi.fn().mockImplementation(async (req, next) => {
+        const result = await next(req);
+        return result;
+      });
+
+      const container = buildDIContainer()
+        .register(MiddleWareOrderToken, [LoggingMiddlewareToken])
+        .registerFactory(IEventBusToken, EventBusFactory)
+        .register(LoggingMiddlewareToken, { handle: middlewareSpy })
+        .register(TestCommandHandlerToken, {
+          handle: async (cmd) => cmd.payload.input.toUpperCase(),
+        })
+        .register(TestQueryHandlerToken, {
+          handle: async (query) => ({
+            data: `Found: ${query.payload.id}`,
+            found: true,
+          }),
+        })
+        .getResult();
+
+      const eventBus = container.resolve(IEventBusToken);
+
+      // Test command with middleware
+      const command: ICommand<TestCommandPayload, string> = {
+        createdAt: new Date(),
+        token: TestCommandToken,
+        payload: { input: "hello" },
+      };
+
+      const commandResult = await eventBus.invoke(command);
+      expect(commandResult).toEqual("HELLO");
+
+      // Test query with middleware
+      const query: IQuery<TestQueryPayload, { data: string; found: boolean }> =
+        {
+          createdAt: new Date(),
+          token: TestQueryToken,
+          payload: { id: "123" },
+        };
+
+      const queryResult = await eventBus.invoke(query);
+      expect(queryResult).toEqual({ data: "Found: 123", found: true });
+
+      // Check that middleware was called for both command and query
+      expect(middlewareSpy).toHaveBeenCalledTimes(2);
     });
   });
 

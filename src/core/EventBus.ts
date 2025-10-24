@@ -17,6 +17,10 @@ import {
   INotificationHandler,
   INotificationHandlerToken,
   INotificationToken,
+  IQuery,
+  IQueryHandler,
+  IQueryHandlerToken,
+  IQueryToken,
   MiddleWareOrderToken,
 } from "./IEventBus.js";
 
@@ -65,8 +69,10 @@ export const EventBusFactory = withDependencies(
       INotificationHandlerToken
     );
 
-    const tokensCommandHandlers =
-      container.findImplementationTokens(ICommandHandlerToken);
+    const tokensRequestsHandlers = [
+      ...container.findImplementationTokens(ICommandHandlerToken),
+      ...container.findImplementationTokens(IQueryHandlerToken),
+    ];
 
     const tokensMiddlewares = container.findImplementationTokens(
       IHandlerMiddlewareToken
@@ -86,8 +92,8 @@ export const EventBusFactory = withDependencies(
       });
     });
 
-    const commandsState: EventBusCommandsState = {};
-    tokensCommandHandlers.forEach((token) => {
+    const requestsState: EventBusCommandsState = {};
+    tokensRequestsHandlers.forEach((token) => {
       const commandToken = token.metadata?.generics?.[0];
       if (!commandToken) {
         throw new Error(
@@ -95,12 +101,12 @@ export const EventBusFactory = withDependencies(
         );
       }
 
-      if (commandsState[commandToken.key]) {
+      if (requestsState[commandToken.key]) {
         throw new Error(
           `Command handler ${token.key} is already registered for Command ${commandToken.key}`
         );
       }
-      commandsState[commandToken.key] = token;
+      requestsState[commandToken.key] = token;
     });
 
     const middlewareState: EventBusNotificationsState = {};
@@ -188,11 +194,11 @@ export const EventBusFactory = withDependencies(
 
     return {
       async invoke<T, R>(command: ICommand<T, R>): Promise<R> {
-        const handlerToken = commandsState[command.token.key];
+        const handlerToken = requestsState[command.token.key];
 
         if (!handlerToken) {
           throw new Error(
-            `Command handler for Command ${command.token.key} not found`
+            `Request handler for Request ${command.token.key} not found`
           );
         }
 
@@ -292,6 +298,34 @@ export function createCommandDIToken<T extends ICommand<any, R>, R>() {
 }
 
 /**
+ * Creates a helper function for building query tokens with proper metadata.
+ * This function returns an object with an `as` method that automatically sets up
+ * the correct implements chain for queries.
+ *
+ * @template T - The type of the query payload
+ * @template R - The type of the query result
+ * @returns An object with an `as` method for creating query tokens
+ */
+export function createQueryDIToken<T extends IQuery<any, unknown>>() {
+  return {
+    /**
+     * Creates a query token with the specified key and optional metadata.
+     * Automatically adds IQueryToken in the implements metadata.
+     *
+     * @param key - Unique string identifier for this query type
+     * @param metadata - Optional metadata including generics and additional implements
+     * @returns A configured query token
+     */
+    as(key: string, metadata?: DITokenMetadata<T>) {
+      return createDIToken<T>().as(key, {
+        ...metadata,
+        implements: [IQueryToken, ...(metadata?.implements ?? [])] as any,
+      });
+    },
+  };
+}
+
+/**
  * Creates a helper function for building notification handler tokens with proper metadata.
  * This function returns an object with an `as` method that automatically sets up
  * the correct implements chain for notification handlers.
@@ -348,6 +382,37 @@ export function createCommandHandlerDIToken<T extends ICommandHandler<any>>() {
         ...metadata,
         implements: [
           ICommandHandlerToken,
+          ...(metadata?.implements ?? []),
+        ] as any,
+      });
+    },
+  };
+}
+
+/**
+ * Creates a helper function for building query handler tokens with proper metadata.
+ * This function returns an object with an `as` method that automatically sets up
+ * the correct implements chain for query handlers.
+ *
+ * @template T - The query type (extends IQuery)
+ * @template R - The return type of the query
+ * @returns An object with an `as` method for creating query handler tokens
+ */
+export function createQueryHandlerDIToken<T extends IQueryHandler<any>>() {
+  return {
+    /**
+     * Creates a query handler token with the specified key and optional metadata.
+     * Automatically implements the IQueryHandlerToken interface.
+     *
+     * @param key - Unique string identifier for this handler
+     * @param metadata - Optional metadata including generics and additional implements
+     * @returns A configured query handler token
+     */
+    as(key: string, metadata?: DITokenMetadata<T>) {
+      return createDIToken<T>().as(key, {
+        ...metadata,
+        implements: [
+          IQueryHandlerToken,
           ...(metadata?.implements ?? []),
         ] as any,
       });

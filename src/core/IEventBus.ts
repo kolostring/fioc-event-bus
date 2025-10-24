@@ -69,6 +69,40 @@ export interface ICommandHandler<T extends ICommand<any, unknown>> {
 }
 
 /**
+ * Represents a query that expects a response.
+ * Queries follow the request-response pattern where exactly one handler
+ * processes the query and returns a result.
+ *
+ * @template T - The type of the query payload
+ * @template R - The type of the query result
+ */
+export interface IQuery<T, R> {
+  /** The FIoC token identifying this query type */
+  token: DIToken<IQuery<T, R>>;
+  /** The payload data carried by the query */
+  payload: T;
+  /** Timestamp when the query was created */
+  createdAt: Date;
+}
+
+/**
+ * Handler interface for processing query requests.
+ * Query handlers receive the full query object and must return a result.
+ * Only one handler should exist per query type.
+ *
+ * @template T - The query type (extends IQuery)
+ * @template R - The return type of the query
+ */
+export interface IQueryHandler<T extends IQuery<any, unknown>> {
+  /**
+   * Handles a query and returns a result.
+   * @param query - The query to process
+   * @returns A promise that resolves to the query result
+   */
+  handle: (query: T) => Promise<T extends IQuery<any, infer R> ? R : unknown>;
+}
+
+/**
  * Middleware interface for intercepting and modifying handler execution.
  * Middlewares can perform cross-cutting concerns like logging, validation,
  * authentication, or caching before and after handler execution.
@@ -140,6 +174,19 @@ export const ICommandToken = createDIToken<ICommand<any, any>>().as("ICommand");
  */
 export const ICommandHandlerToken =
   createDIToken<ICommandHandler<any>>().as("ICommandHandler");
+
+/**
+ * FIoC token representing the base query interface.
+ * Used for middleware registration that applies to all queries.
+ */
+export const IQueryToken = createDIToken<IQuery<any, any>>().as("IQuery");
+
+/**
+ * FIoC token representing the base query handler interface.
+ * Used internally for handler discovery and registration.
+ */
+export const IQueryHandlerToken =
+  createDIToken<IQueryHandler<any>>().as("IQueryHandler");
 
 /**
  * FIoC token representing the base middleware interface.
