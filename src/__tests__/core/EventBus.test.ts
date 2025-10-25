@@ -59,8 +59,7 @@ const TestCommandPayloadToken =
 
 // Test command token
 const TestCommandToken = createCommandDIToken<
-  ICommand<TestCommandPayload, string>,
-  string
+  ICommand<TestCommandPayload, string>
 >().as("TestCommand", {
   generics: [TestCommandPayloadToken],
 });

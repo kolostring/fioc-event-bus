@@ -352,7 +352,7 @@ export function createNotificationDIToken<T extends INotification<any>>() {
  * @template R - The type of the command result
  * @returns An object with an `as` method for creating command tokens
  */
-export function createCommandDIToken<T extends ICommand<any, R>, R>() {
+export function createCommandDIToken<T extends ICommand<any, unknown>>() {
   return {
     /**
      * Creates a command token with the specified key and optional metadata.
@@ -362,7 +362,7 @@ export function createCommandDIToken<T extends ICommand<any, R>, R>() {
      * @param metadata - Optional metadata including generics and additional implements
      * @returns A configured command token
      */
-    as(key: string, metadata?: DITokenMetadata<ICommand<T, R>>) {
+    as(key: string, metadata?: DITokenMetadata<T>) {
       return createDIToken<T>().as(key, {
         ...metadata,
         implements: [ICommandToken, ...(metadata?.implements ?? [])] as any,
