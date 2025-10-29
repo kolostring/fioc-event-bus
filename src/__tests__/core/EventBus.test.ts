@@ -571,6 +571,70 @@ describe("EventBus", () => {
       // Check that middleware was called for both command and query
       expect(middlewareSpy).toHaveBeenCalledTimes(2);
     });
+
+    it("should execute more than one middleware for the same token when implementing more than one interface", async () => {
+      // Middleware that applies to all commands and queries
+      const LoggingMiddlewareToken = createMiddlewareDIToken<any, any>().as(
+        "LoggingMiddleware",
+        {
+          generics: [ICommandToken, IQueryToken], // Applies to both commands and queries
+        }
+      );
+
+      const mockToken = createDIToken<any>().as("MockToken");
+      const mockMiddleware = createMiddlewareDIToken<any, any>().as(
+        "MockMiddleware",
+        {
+          generics: [mockToken],
+        }
+      );
+
+      const middleware1Spy = vi.fn().mockImplementation(async (req, next) => {
+        const result = await next(req);
+        return result;
+      });
+
+      const middleware2Spy = vi.fn().mockImplementation(async (req, next) => {
+        const result = await next(req);
+        return result;
+      });
+
+      const container = buildDIContainer()
+        .register(MiddleWareOrderToken, [
+          LoggingMiddlewareToken,
+          mockMiddleware,
+        ])
+        .registerFactory(IEventBusToken, EventBusFactory)
+        .register(LoggingMiddlewareToken, { handle: middleware1Spy })
+        .register(mockMiddleware, { handle: middleware2Spy })
+        .register(TestCommandHandlerToken, {
+          handle: async (cmd) => cmd.payload.input.toUpperCase(),
+        })
+        .getResult();
+
+      const eventBus = container.resolve(IEventBusToken);
+
+      // Test command with middleware
+      const command: ICommand<TestCommandPayload, string> = {
+        createdAt: new Date(),
+        token: createCommandDIToken<ICommand<TestCommandPayload, any>>().as(
+          "TestCommand",
+          {
+            implements: [mockToken],
+          }
+        ),
+        payload: { input: "hello" },
+      };
+
+      console.log("LOL", JSON.stringify(command.token), eventBus);
+
+      const commandResult = await eventBus.invoke(command);
+      expect(commandResult).toEqual("HELLO");
+
+      // Check that middleware was called for both command and query
+      expect(middleware1Spy).toHaveBeenCalled();
+      expect(middleware2Spy).toHaveBeenCalled();
+    });
   });
 
   describe("Exceptions", () => {

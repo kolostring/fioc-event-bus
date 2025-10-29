@@ -130,22 +130,19 @@ export const EventBusFactory = withDependencies(
      * @returns An array of middleware tokens applicable to the token
      */
     const findMiddlewaresForToken = (token: DIToken<any>) => {
-      let middlewares = [] as DIToken<IHandlerMiddleware<any, any>>[];
-      let tokenHead = token;
+      let middlewares = [...(middlewareState[token.key] ?? [])];
 
-      // Include middlewares for the specific token first
-      middlewares = [...middlewares, ...(middlewareState[tokenHead.key] ?? [])];
-
-      // Then traverse up the implements chain to find more general middlewares
-      while (tokenHead.metadata?.implements?.[0]) {
-        tokenHead = tokenHead.metadata.implements[0];
-        middlewares = [
-          ...middlewares,
-          ...(middlewareState[tokenHead.key] ?? []),
-        ];
+      if (!token.metadata?.implements?.length) {
+        return middlewares;
       }
 
-      return middlewares;
+      token.metadata.implements.forEach((impToken) => {
+        console.log("IMP", impToken.key);
+        middlewares = [...middlewares, ...findMiddlewaresForToken(impToken)];
+        console.log("MIDDLEWARES", middlewares);
+      });
+
+      return Array.from(new Set(middlewares));
     };
 
     /**
