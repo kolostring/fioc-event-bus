@@ -147,9 +147,7 @@ export const EventBusFactory = withDependencies(
       }
 
       token.metadata.implements.forEach((impToken) => {
-        console.log("IMP", impToken.key);
         middlewares = [...middlewares, ...findMiddlewaresForToken(impToken)];
-        console.log("MIDDLEWARES", middlewares);
       });
 
       return Array.from(new Set(middlewares));

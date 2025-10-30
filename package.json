@@ -1,6 +1,6 @@
 {
   "name": "@fioc/event-bus",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "type": "module",
   "license": "MIT",
   "main": "./dist/cjs/index.cjs",
