@@ -78,6 +78,16 @@ export const EventBusFactory = withDependencies(
       IHandlerMiddlewareToken
     );
 
+    if (tokensMiddlewares.length > middlewareOrder.length) {
+      throw new Error(
+        "Missing middlewares in middleware order: " +
+          tokensMiddlewares
+            .filter((token) => middlewareOrder.indexOf(token) === -1)
+            .map((token) => token.key)
+            .join(", ")
+      );
+    }
+
     const notificationsState: EventBusNotificationsState = {};
     tokensNotificationHandlers.forEach((token) => {
       if (!token.metadata?.generics?.[0]) {

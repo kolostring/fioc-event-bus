@@ -677,21 +677,45 @@ describe("EventBus", () => {
     });
 
     it("should throw error when middleware is missing generics", () => {
+      const InvalidMiddlewareToken =
+        createMiddlewareDIToken().as("InvalidMiddleware");
+      const middleware1Spy = vi.fn().mockImplementation(async (req, next) => {
+        const result = await next(req);
+        return result;
+      });
+
       expect(() => {
         const container = buildDIContainer()
           .register(MiddleWareOrderToken, [])
           .registerFactory(IEventBusToken, EventBusFactory)
-          // @ts-expect-error Missing generics for IHandlerMiddlewareToken
-          .register(
-            createDIToken().as("InvalidMiddleware", {
-              implements: [IHandlerMiddlewareToken],
-            })
-          )
+          .register(InvalidMiddlewareToken, { handle: middleware1Spy })
+          .register(MiddleWareOrderToken, [InvalidMiddlewareToken])
           .getResult();
 
         // Resolve the event bus to trigger the factory and validation
         container.resolve(IEventBusToken);
       }).toThrow("Middleware token InvalidMiddleware is missing generics");
+    });
+
+    it("should throw error when middleware is missing from middleware order", () => {
+      const InvalidMiddlewareToken =
+        createMiddlewareDIToken().as("InvalidMiddleware");
+      const middleware1Spy = vi.fn().mockImplementation(async (req, next) => {
+        const result = await next(req);
+        return result;
+      });
+
+      expect(() => {
+        const container = buildDIContainer()
+          .register(MiddleWareOrderToken, [])
+          .registerFactory(IEventBusToken, EventBusFactory)
+          .register(InvalidMiddlewareToken, { handle: middleware1Spy })
+          .register(MiddleWareOrderToken, [])
+          .getResult();
+
+        // Resolve the event bus to trigger the factory and validation
+        container.resolve(IEventBusToken);
+      }).toThrow("Missing middlewares in middleware order: InvalidMiddleware");
     });
 
     it("should throw error when command handler is registered twice for same command", () => {
