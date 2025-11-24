@@ -13,7 +13,6 @@ import {
 import {
   INotificationHandlerToken,
   ICommandHandlerToken,
-  IHandlerMiddlewareToken,
   INotification,
   ICommand,
   IQuery,
@@ -111,7 +110,7 @@ describe("EventBus", () => {
 
       await eventBus.publish(notification);
 
-      expect(handlerSpy).toHaveBeenCalledWith({ message: "test" });
+      expect(handlerSpy).toHaveBeenCalledWith(notification);
     });
 
     it("should publish to multiple handlers in parallel by default", async () => {
@@ -157,8 +156,8 @@ describe("EventBus", () => {
 
       // Should take approximately the time of the slowest handler (50ms)
       expect(duration).toBeLessThan(70); // Add some buffer
-      expect(handler1Spy).toHaveBeenCalledWith({ message: "test" });
-      expect(handler2Spy).toHaveBeenCalledWith({ message: "test" });
+      expect(handler1Spy).toHaveBeenCalledWith(notification);
+      expect(handler2Spy).toHaveBeenCalledWith(notification);
     });
 
     it("should execute handlers sequentially when strategy is sequential", async () => {
@@ -442,7 +441,7 @@ describe("EventBus", () => {
 
       expect(middleware1Spy).toHaveBeenCalled();
       expect(middleware2Spy).toHaveBeenCalled();
-      expect(handlerSpy).toHaveBeenCalledWith({ message: "test" });
+      expect(handlerSpy).toHaveBeenCalledWith(notification);
       expect(log).toEqual([
         "middleware1 before",
         "middleware2 before",
@@ -468,7 +467,7 @@ describe("EventBus", () => {
         return result;
       });
 
-      const handlerSpy = vi.fn().mockImplementation((payload) => {
+      const handlerSpy = vi.fn().mockImplementation(() => {
         log.push("handler");
       });
 
@@ -506,7 +505,7 @@ describe("EventBus", () => {
 
       expect(middleware1Spy).toHaveBeenCalled();
       expect(middleware2Spy).toHaveBeenCalled();
-      expect(handlerSpy).toHaveBeenCalledWith({ message: "test" });
+      expect(handlerSpy).toHaveBeenCalledWith(notification);
       expect(log).toEqual([
         "middleware1 before",
         "middleware2 before",

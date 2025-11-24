@@ -179,33 +179,33 @@ export const EventBusFactory = withDependencies(
     };
 
     /**
-     * Executes all notification handlers sequentially for the given handlers array with the provided payload.
+     * Executes all notification handlers sequentially for the given handlers array with the provided notification.
      *
      * @param handlers - Array of handler tokens to execute, or undefined if no handlers
-     * @param payload - The payload to pass to each notification handler
+     * @param notification - The notification to pass to each notification handler
      */
     const executeNotificationHandlersSequentially = async (
       handlers: DIToken<any>[] | undefined,
-      payload: unknown
+      notification: unknown
     ) => {
       if (handlers !== undefined) {
         for (const handler of handlers) {
           await container
             .resolve(handler as DIToken<INotificationHandler<any>>)
-            .handle(payload);
+            .handle(notification);
         }
       }
     };
 
     /**
-     * Executes all notification handlers in parallel for the given handlers array with the provided payload.
+     * Executes all notification handlers in parallel for the given handlers array with the provided notification.
      *
      * @param handlers - Array of handler tokens to execute, or undefined if no handlers
-     * @param payload - The payload to pass to each notification handler
+     * @param notification - The notification to pass to each notification handler
      */
     const executeNotificationHandlersInParallel = async (
       handlers: DIToken<any>[] | undefined,
-      payload: unknown
+      notification: unknown
     ) => {
       if (handlers !== undefined) {
         await Promise.all(
@@ -213,21 +213,21 @@ export const EventBusFactory = withDependencies(
             async (handler) =>
               await container
                 .resolve(handler as DIToken<INotificationHandler<any>>)
-                .handle(payload)
+                .handle(notification)
           )
         );
       }
     };
 
     /**
-     * Executes all notification handlers in parallel for the given handlers array with the provided payload, but wont stop on error.
+     * Executes all notification handlers in parallel for the given handlers array with the provided notification, but wont stop on error.
      *
      * @param handlers - Array of handler tokens to execute, or undefined if no handlers
-     * @param payload - The payload to pass to each notification handler
+     * @param notification - The notification to pass to each notification handler
      */
     const executeNotificationHandlersBestEffort = async (
       handlers: DIToken<any>[] | undefined,
-      payload: unknown
+      notification: unknown
     ) => {
       if (!handlers || handlers.length === 0) {
         return [];
@@ -241,7 +241,7 @@ export const EventBusFactory = withDependencies(
             const handlerInstance = container.resolve(
               handler as DIToken<INotificationHandler<any>>
             );
-            await handlerInstance.handle(payload);
+            await handlerInstance.handle(notification);
           } catch (error) {
             errors.push(error as Error);
           }
@@ -276,7 +276,7 @@ export const EventBusFactory = withDependencies(
         return pipeline(req);
       },
       /**
-       * Publishes a notification with the given payload.
+       * Publishes a notification with the given notification.
        * @param notification The notification to publish.
        * @returns A promise that resolves when all notification handlers have been executed.
        */
@@ -285,30 +285,27 @@ export const EventBusFactory = withDependencies(
 
         const middlewares = findMiddlewaresForToken(notification.token);
 
-        const pipeline = createMiddlewarePipeline(
-          middlewares,
-          async (request) => {
-            switch (strategy) {
-              case "parallel":
-                return await executeNotificationHandlersInParallel(
-                  handlers,
-                  notification.payload
-                );
-              case "sequential":
-                return await executeNotificationHandlersSequentially(
-                  handlers,
-                  notification.payload
-                );
-              case "besteffort":
-                return await executeNotificationHandlersBestEffort(
-                  handlers,
-                  notification.payload
-                );
-              default:
-                throw new Error(`Invalid publish strategy: ${strategy}`);
-            }
+        const pipeline = createMiddlewarePipeline(middlewares, async () => {
+          switch (strategy) {
+            case "parallel":
+              return await executeNotificationHandlersInParallel(
+                handlers,
+                notification
+              );
+            case "sequential":
+              return await executeNotificationHandlersSequentially(
+                handlers,
+                notification
+              );
+            case "besteffort":
+              return await executeNotificationHandlersBestEffort(
+                handlers,
+                notification
+              );
+            default:
+              throw new Error(`Invalid publish strategy: ${strategy}`);
           }
-        );
+        });
 
         return (await pipeline(notification)) as Promise<
           typeof strategy extends "besteffort" ? Error[] : void
